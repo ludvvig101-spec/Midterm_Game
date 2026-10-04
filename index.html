@@ -37,7 +37,7 @@ const Q=[{"c": 4, "q": "Knowledge/Terminology: What are three important elements
 const CH={4:["Infection Control","Chain of infection, precautions, Spaulding, VAE","🧼"],6:["Physics at the Bedside","Gas laws, flow, liquids, heat, humidity physics","⚛️"],39:["Humidity & Bland Aerosol","Humidifiers, HMEs, nebulizers, troubleshooting","💧"]};
 const RANKS=[[0,"Student RT"],[250,"Clinical Intern"],[600,"CRT"],[1100,"RRT"],[2000,"NBRC Legend"]];
 const BADGES={first:"🩺 First Save",s5:"🔥 5-Streak",perfect:"💯 Perfect Mission",boss:"👑 Boss Defeated",clinic:"🛠️ Clinic Graduate"};
-const KEY="codeblue1",CK="cb1",DEF=()=>({xp:0,box:{},miss:{},stars:{},bad:{},snd:true,best:0,name:"",top:[],runs:0,ans:0,right:0});
+const KEY="codeblue1",CK="cb1",DEF=()=>({xp:0,box:{},miss:{},stars:{},bad:{},snd:true,eng:"auto",best:0,name:"",top:[],runs:0,ans:0,right:0});
 const cdir=()=>location.pathname.replace(/[^\/]*$/,"")||"/";
 function pack(s){return JSON.stringify({x:s.xp,b:s.best,n:s.name,t:s.top,r:s.runs,a:s.ans,k:s.right,m:s.snd?1:0,g:Q.map((_,i)=>s.box[i]==null?"-":s.box[i]).join(""),w:Q.map((_,i)=>Math.min(9,s.miss[i]||0)).join(""),st:s.stars,bd:Object.keys(s.bad).join(",")})}
 function unpack(j){const p=JSON.parse(j),s=DEF();s.xp=p.x|0;s.best=p.b|0;s.name=p.n||"";s.top=p.t||[];s.runs=p.r|0;s.ans=p.a|0;s.right=p.k|0;s.snd=p.m!==0;s.stars=p.st||{};(p.bd||"").split(",").filter(Boolean).forEach(k=>s.bad[k]=1);(p.g||"").split("").forEach((c,i)=>{if(c!="-")s.box[i]=+c});(p.w||"").split("").forEach((c,i)=>{if(+c)s.miss[i]=+c});return s}
@@ -56,12 +56,28 @@ const shuf=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(
 const rank=()=>{let r=RANKS[0],n=RANKS[1];for(let i=0;i<RANKS.length;i++)if(S.xp>=RANKS[i][0]){r=RANKS[i];n=RANKS[i+1]}return{r,n}};
 function toast(t){const e=$("#toast");e.textContent=t;e.style.display="block";setTimeout(()=>e.style.display="none",2300)}
 function badge(k){if(!S.bad[k]){S.bad[k]=1;save();toast("Badge unlocked: "+BADGES[k]);fanfare()}}
-let AC;
-function actx(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.state==="suspended")AC.resume();return AC}catch(e){return null}}
-function beep(f,d=.12,ty="sine",at=0,v=.12){if(!S.snd)return;const c=actx();if(!c)return;try{const o=c.createOscillator(),g=c.createGain(),s=c.currentTime+at;o.type=ty;o.frequency.setValueAtTime(f,s);g.gain.setValueAtTime(v,s);g.gain.exponentialRampToValueAtTime(.0001,s+d);o.connect(g);g.connect(c.destination);o.start(s);o.stop(s+d+.02)}catch(e){}}
-const good=()=>{beep(660,.12,"sine",0);beep(880,.18,"sine",.09)},wrong=()=>{beep(220,.18,"sawtooth",0,.1);beep(150,.3,"sawtooth",.15,.1);navigator.vibrate&&navigator.vibrate(120)},
-fanfare=()=>[523,659,784,1047].forEach((f,i)=>beep(f,.24,"triangle",i*.12)),flatline=()=>beep(440,1.4,"sine",0,.07),tick=()=>beep(1000,.04,"square",0,.05);
-document.addEventListener("pointerdown",()=>actx(),{once:true});
+// Sound: clips are synthesized in code, then played by HTML5 <audio> or Web Audio (Auto tries one, then the other)
+const WR=22050;
+function mkPCM(ns){const R=WR,N=Math.ceil(R*(Math.max(...ns.map(n=>n[1]+n[2]))+.05)),a=new Float32Array(N);
+for(const[f,s,d,ty,v,sus]of ns){const i0=Math.floor(s*R),n=Math.floor(d*R);for(let i=0;i<n&&i0+i<N;i++){const p=(f*i/R)%1,w=ty=="saw"?2*p-1:ty=="tri"?4*Math.abs(p-.5)-1:ty=="sq"?(p<.5?1:-1):Math.sin(2*Math.PI*f*i/R);a[i0+i]+=w*v*Math.min(1,i/200)*(sus?Math.min(1,(n-i)/400):Math.pow(1-i/n,2))}}return a}
+function mkWav(a){const N=a.length,b=new Uint8Array(44+N*2),dv=new DataView(b.buffer),W=(o,s)=>[...s].forEach((c,i)=>dv.setUint8(o+i,c.charCodeAt(0)));
+W(0,"RIFF");dv.setUint32(4,36+N*2,true);W(8,"WAVEfmt ");dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);dv.setUint32(24,WR,true);dv.setUint32(28,WR*2,true);dv.setUint16(32,2,true);dv.setUint16(34,16,true);W(36,"data");dv.setUint32(40,N*2,true);
+for(let i=0;i<N;i++)dv.setInt16(44+i*2,Math.max(-1,Math.min(1,a[i]))*32767,true);
+let s="";for(let i=0;i<b.length;i+=8192)s+=String.fromCharCode.apply(null,b.subarray(i,i+8192));return"data:audio/wav;base64,"+btoa(s)}
+const SD={good:[[660,0,.12,"sin",.6],[880,.09,.22,"sin",.6]],bad:[[220,0,.2,"saw",.4],[150,.15,.34,"saw",.4]],fan:[523,659,784,1047].map((f,i)=>[f,i*.12,.28,"tri",.6]),flat:[[440,0,1.4,"sin",.4,1]],tick:[[1000,0,.05,"sq",.3]]},PCM={},SND={},BUF={},ENG={auto:"Auto",tag:"Audio tag",web:"Web Audio"};
+const sndInit=()=>{if(!PCM.good)for(const k in SD)PCM[k]=mkPCM(SD[k])};
+function tagFor(k){if(!SND[k]){const a=new Audio();a.preload="auto";a.src=mkWav(PCM[k]);SND[k]=a}return SND[k]}
+let AC;function actx(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.state!=="running")AC.resume();return AC}catch(e){return null}}
+function webPlay(k){try{sndInit();const c=actx();if(!c)return Promise.reject(new Error("Web Audio unavailable"));if(!BUF[k]){const b=c.createBuffer(1,PCM[k].length,WR);b.getChannelData(0).set(PCM[k]);BUF[k]=b}const s=c.createBufferSource();s.buffer=BUF[k];s.connect(c.destination);s.start(0);return Promise.resolve()}catch(e){return Promise.reject(e)}}
+function tagPlay(k){try{sndInit();const a=tagFor(k);a.muted=false;a.currentTime=0;const p=a.play();return p&&p.then?p:Promise.resolve()}catch(e){return Promise.reject(e)}}
+function play(k){if(!S.snd)return;const e=S.eng||"auto";(e=="web"?webPlay(k):e=="tag"?tagPlay(k):tagPlay(k).catch(()=>webPlay(k))).catch(()=>{})}
+function unlock(){try{sndInit();actx();for(const k in SD){const a=tagFor(k);a.muted=true;const p=a.play();a.pause();a.currentTime=0;a.muted=false;p&&p.catch&&p.catch(()=>{})}}catch(e){}}
+function testSound(){if(!S.snd){toast("Sound is off. Tap the 🔇 button to turn it on.");return}const e=S.eng||"auto",errs=[],er=(n,x)=>{errs.push(n+": "+((x&&(x.name||x.message))||x));throw x};
+const A=()=>tagPlay("fan").then(()=>"audio tag",x=>er("audio tag",x)),B=()=>webPlay("fan").then(()=>"web audio",x=>er("web audio",x));
+(e=="web"?B():e=="tag"?A():A().catch(B)).then(m=>toast("🔊 Played via "+m+". Hear nothing? Check volume, mute, silent switch, or tap Engine."),()=>toast("❌ Blocked ("+errs.join("; ")+"). Open the game in a normal browser tab."))}
+function cycleEng(){const o=["auto","tag","web"];S.eng=o[(o.indexOf(S.eng||"auto")+1)%3];save();home();toast("Sound engine: "+ENG[S.eng]+". Tap Test sound.")}
+const good=()=>play("good"),wrong=()=>{play("bad");navigator.vibrate&&navigator.vibrate(120)},fanfare=()=>play("fan"),flatline=()=>play("flat"),tick=()=>play("tick");
+document.addEventListener("pointerdown",unlock,{once:true});document.addEventListener("keydown",unlock,{once:true});
 // ECG
 let ecgT=0,flat=false,raf;
 function ecg(){const c=$("#ecg");if(!c){return}const x=c.getContext("2d"),w=c.width=c.clientWidth*2,h=c.height=140;x.clearRect(0,0,w,h);x.strokeStyle=flat?"#ff5470":"#2ee59d";x.lineWidth=3;x.beginPath();
@@ -84,7 +100,7 @@ app.innerHTML=`<h1>🚑 CODE BLUE</h1><p class="sub">Midterm Mission · Egan's C
 <button class="card ch" onclick="boss()"><b>👑 Boss Exam</b><small>15 mixed questions · 45 s each · 3 lives. Interleaving builds exam-day skill.</small></button>
 <button class="card ch" onclick="clinic()"><b>🛠️ Mistake Clinic</b><small>${due} question${due==1?"":"s"} waiting. Retry what you missed.</small></button>
 <button class="card ch" onclick="brief(4)"><b>📋 Briefing Room</b><small>Review notes from your group's pages.</small></button></div>
-<div class="row" style="margin-top:14px"><button onclick="toggleSnd()">${S.snd?"🔊 Sound on":"🔇 Sound off"}</button><button onclick="good();setTimeout(fanfare,400)">🎵 Test sound</button><button onclick="backup()">💾 Backup / Restore</button><button onclick="resetAll()">Reset progress</button></div><p class="sub">No sound on iPhone? Turn off the silent switch and raise the volume.</p>
+<div class="row" style="margin-top:14px"><button onclick="toggleSnd()">${S.snd?"🔊 Sound on":"🔇 Sound off"}</button><button onclick="testSound()">🎵 Test sound</button><button onclick="cycleEng()">⚙️ Engine: ${ENG[S.eng||"auto"]}</button><button onclick="backup()">💾 Backup / Restore</button><button onclick="resetAll()">Reset progress</button></div><p class="sub">No sound? Raise the volume, and on iPhone check the side silent switch. Tap Test sound to check.</p>
 <p class="sub">Badges: ${Object.keys(BADGES).map(k=>S.bad[k]?BADGES[k]:"🔒").join(" ")}</p>`;startEcg()}
 function chapter(c){app.innerHTML=`<button onclick="home()">← Back</button><h2>${CH[c][2]} Ch. ${c}: ${CH[c][0]}</h2><p class="sub">Tip: skim the briefing first, then test yourself. Recalling answers beats re-reading.</p><div class="grid"><button class="pri" onclick="run('Ch. ${c} Mission',pick(ids(${c}),10),{c:${c}})">▶ Start Mission (10 questions)</button><button onclick="brief(${c})">📋 Read briefing first</button></div>`}
 function brief(c){const t=Object.keys(CH).map(k=>`<button ${k==c?'class="pri"':""} onclick="brief(${k})">Ch. ${k}</button>`).join("");
